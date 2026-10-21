@@ -1,0 +1,69 @@
+CODE:
+
+import nltk
+from nltk import RegexpParser, pos_tag, word_tokenize
+
+# Download necessary NLTK models
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+
+
+def perform_chunking(text):
+    # Step 1: Tokenization
+    tokens = word_tokenize(text)
+
+    # Step 2: Part-of-Speech (POS) Tagging
+    pos_tags = pos_tag(tokens)
+
+    # Step 3: Define Chunk Grammar using Regular Expressions
+    # NP: Noun Phrase (Optional Determiner + Adjectives + Noun(s))
+    # VP: Verb Phrase (Verb + Noun Phrase or Prepositional Phrase)
+    grammar = r"""
+        NP: {<DT>?<JJ>*<NN.*>+}    # Chunk sequences of DT, JJ, NN
+        VP: {<VB.*><NP|PP|CLAUSE>*} # Chunk verbs followed by NP
+    """
+
+    # Step 4: Create Chunk Parser and Parse
+    chunk_parser = RegexpParser(grammar)
+    tree = chunk_parser.parse(pos_tags)
+
+    return pos_tags, tree
+
+
+if __name__ == "__main__":
+    sample_sentence = "The quick brown fox jumps over the lazy dog."
+
+    tags, chunk_tree = perform_chunking(sample_sentence)
+
+    print("=== 1. POS TAGS ===")
+    print(tags)
+    print("\n" + "=" * 50 + "\n")
+
+    print("=== 2. CHUNK TREE STRUCTURE ===")
+    print(chunk_tree)
+    print("\n" + "=" * 50 + "\n")
+
+    print("=== 3. EXTRACTED CHUNKS ===")
+    for subtree in chunk_tree.subtrees():
+        if subtree.label() in ["NP", "VP"]:
+            chunk_text = " ".join(word for word, tag in subtree.leaves())
+            print(f"[{subtree.label()}] : {chunk_text}")
+
+OUTPUT:
+
+=== 1. POS TAGS ===
+[('The', 'DT'), ('quick', 'JJ'), ('brown', 'JJ'), ('fox', 'NN'), ('jumps', 'VBZ'), ('over', 'IN'), ('the', 'DT'), ('lazy', 'JJ'), ('dog', 'NN')]
+
+
+=== 2. CHUNK TREE STRUCTURE ===
+(S
+  (NP The/DT quick/JJ brown/JJ fox/NN)
+  (VP jumps/VBZ)
+  over/IN
+  (NP the/DT lazy/JJ dog/NN))
+
+
+=== 3. EXTRACTED CHUNKS ===
+[NP] : The quick brown fox
+[VP] : jumps
+[NP] : the lazy dog
