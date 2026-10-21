@@ -1,0 +1,123 @@
+CODE:
+
+import numpy as np
+
+
+class HiddenMarkovModelPOS:
+    def __init__(self, states, vocab, start_p, trans_p, emit_p):
+        self.states = states
+        self.vocab = vocab
+        self.start_p = start_p  # Initial state probabilities pi
+        self.trans_p = trans_p  # State transition matrix A
+        self.emit_p = emit_p  # Emission probability matrix B
+
+        self.state_to_idx = {s: i for i, s in enumerate(states)}
+        self.idx_to_state = {i: s for i, s in enumerate(states)}
+
+    def viterbi(self, obs_sequence):
+        """Finds the most likely sequence of hidden states (POS tags)
+
+        given an observation sequence (words) using dynamic programming.
+        """
+        N = len(self.states)
+        T = len(obs_sequence)
+
+        # Initialize Viterbi table and Backpointer table
+        viterbi_table = np.zeros((N, T))
+        backpointer = np.zeros((N, T), dtype=int)
+
+        # 1. Initialization Step (t = 0)
+        first_word = obs_sequence[0]
+        for s_idx, state in enumerate(self.states):
+            viterbi_table[s_idx, 0] = (
+                self.start_p[state] * self.emit_p[state].get(first_word, 1e-6)
+            )
+            backpointer[s_idx, 0] = 0
+
+        # 2. Recursion Step (t = 1 to T-1)
+        for t in range(1, T):
+            word = obs_sequence[t]
+            for s_idx, state in enumerate(self.states):
+                # Calculate probabilities for all possible previous states
+                prob_transitions = [
+                    viterbi_table[prev_s_idx, t - 1]
+                    * self.trans_p[self.idx_to_state[prev_s_idx]][state]
+                    * self.emit_p[state].get(word, 1e-6)
+                    for prev_s_idx in range(N)
+                ]
+
+                # Store maximum probability and argmax (best previous state)
+                viterbi_table[s_idx, t] = max(prob_transitions)
+                backpointer[s_idx, t] = np.argmax(prob_transitions)
+
+        # 3. Termination Step
+        best_last_state = np.argmax(viterbi_table[:, T - 1])
+
+        # 4. Backtracking Path
+        best_path = [best_last_state]
+        for t in range(T - 1, 0, -1):
+            best_last_state = backpointer[best_last_state, t]
+            best_path.insert(0, best_last_state)
+
+        # Convert state indices back to tag names
+        tagged_sequence = [
+            (obs_sequence[t], self.idx_to_state[best_path[t]])
+            for t in range(T)
+        ]
+        return tagged_sequence
+
+
+# Example Usage
+if __name__ == "__main__":
+    # Define Hidden States (POS Tags)
+    states = ["DET", "NOUN", "VERB"]
+
+    # Vocabulary
+    vocab = ["the", "cat", "saw", "a", "dog"]
+
+    # Initial State Probabilities (pi)
+    start_p = {"DET": 0.6, "NOUN": 0.3, "VERB": 0.1}
+
+    # Transition Probabilities P(Tag_t | Tag_{t-1})
+    trans_p = {
+        "DET": {"DET": 0.05, "NOUN": 0.85, "VERB": 0.10},
+        "NOUN": {"DET": 0.10, "NOUN": 0.20, "VERB": 0.70},
+        "VERB": {"DET": 0.60, "NOUN": 0.30, "VERB": 0.10},
+    }
+
+    # Emission Probabilities P(Word | Tag)
+    emit_p = {
+        "DET": {"the": 0.6, "a": 0.4},
+        "NOUN": {"cat": 0.5, "dog": 0.5},
+        "VERB": {"saw": 1.0},
+    }
+
+    # Instantiate HMM
+    hmm = HiddenMarkovModelPOS(states, vocab, start_p, trans_p, emit_p)
+
+    # Input Observation Sentence
+    sentence = ["the", "cat", "saw", "a", "dog"]
+
+    # Run Viterbi Decoding
+    result = hmm.viterbi(sentence)
+
+    print("=== HMM POS TAGGING WITH VITERBI DECODING ===")
+    print(f"Input Sentence: {' '.join(sentence)}")
+    print("-" * 45)
+    print(f"{'Word':<10} | {'Predicted Tag':<10}")
+    print("-" * 45)
+    for word, tag in result:
+        print(f"{word:<10} | {tag:<10}")
+
+OUTPUT:
+
+=== HMM POS TAGGING WITH VITERBI DECODING ===
+Input Sentence: the cat saw a dog
+---------------------------------------------
+Word       | Predicted Tag
+---------------------------------------------
+the        | DET       
+cat        | NOUN      
+saw        | VERB      
+a          | DET       
+dog        | NOUN
