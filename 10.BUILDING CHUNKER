@@ -1,0 +1,132 @@
+CODE:
+
+import nltk
+from nltk.corpus import conll2000
+import sklearn_crfsuite
+
+# Download the CoNLL-2000 Chunking Dataset
+nltk.download('conll2000', quiet=True)
+
+# 1. Feature Extraction
+def word2features(sent, i):
+    """Extract word, POS tag, and contextual features for chunking."""
+    word, pos, _ = sent[i]
+
+    features = {
+        'bias': 1.0,
+        'word.lower()': word.lower(),
+        'word[-3:]': word[-3:],
+        'word.isupper()': word.isupper(),
+        'pos': pos,
+        'pos[:2]': pos[:2],
+    }
+
+    # Contextual features: Previous word and POS tag
+    if i > 0:
+        prev_word, prev_pos, _ = sent[i - 1]
+        features.update({
+            '-1:word.lower()': prev_word.lower(),
+            '-1:pos': prev_pos,
+        })
+    else:
+        features['BOS'] = True
+
+    # Contextual features: Next word and POS tag
+    if i < len(sent) - 1:
+        next_word, next_pos, _ = sent[i + 1]
+        features.update({
+            '+1:word.lower()': next_word.lower(),
+            '+1:pos': next_pos,
+        })
+    else:
+        features['EOS'] = True
+
+    return features
+
+
+def sent2features(sent):
+    return [word2features(sent, i) for i in range(len(sent))]
+
+
+def sent2labels(sent):
+    """Extract IOB chunk tags (e.g., B-NP, I-NP, O)."""
+    return [chunk_tag for _, _, chunk_tag in sent]
+
+# 2. Main Execution & Training
+if __name__ == '__main__':
+    # Load CoNLL-2000 dataset (contains Word, POS, Chunk Tag)
+    train_sents = conll2000.chunked_sents('train.txt')
+    test_sents = conll2000.chunked_sents('test.txt')
+
+    # Convert NLTK Tree structures to (word, pos, chunk_tag) tuples
+    train_data = [nltk.chunk.tree2conlltags(sent) for sent in train_sents]
+    test_data = [nltk.chunk.tree2conlltags(sent) for sent in test_sents]
+
+    print(
+        f"Loaded CoNLL-2000 Dataset. (Train: {len(train_data)}, Test: {len(test_data)})\n"
+    )
+
+    # Extract features and labels
+    X_train = [sent2features(s) for s in train_data]
+    y_train = [sent2labels(s) for s in train_data]
+
+    X_test = [sent2features(s) for s in test_data]
+    y_test = [sent2labels(s) for s in test_data]
+
+    # Train CRF Model
+    print("Training CRF Chunker model...")
+    crf = sklearn_crfsuite.CRF(
+        algorithm='lbfgs',
+        c1=0.1,
+        c2=0.1,
+        max_iterations=100,
+        all_possible_transitions=True,
+    )
+    crf.fit(X_train, y_train)
+
+    # Evaluate Model
+    y_pred = crf.predict(X_test)
+    correct = sum(
+        p == t for pred, true in zip(y_pred, y_test) for p, t in zip(pred, true)
+    )
+    total = sum(len(true) for true in y_test)
+    print(f"Token-level Chunking Accuracy: {(correct / total) * 100:.2f}%\n")
+
+    # Sample Inference
+    sample_sentence = "The quick brown fox jumps over the lazy dog ."
+    tokens = nltk.word_tokenize(sample_sentence)
+    pos_tags = nltk.pos_tag(tokens)
+
+    # Format sample for feature extraction
+    sample_data = [(w, p, 'O') for w, p in pos_tags]
+    sample_features = sent2features(sample_data)
+
+    # Predict IOB tags
+    predicted_iob = crf.predict([sample_features])[0]
+
+    print("=== CHUNKING PREDICTION ===")
+    print(f"{'Word':<12} | {'POS Tag':<8} | {'Chunk Tag (IOB)'}")
+    print("-" * 40)
+    for (word, pos), chunk_tag in zip(pos_tags, predicted_iob):
+        print(f"{word:<12} | {pos:<8} | {chunk_tag}")
+
+  OUTPUT:
+
+Loaded CoNLL-2000 Dataset. (Train: 8936, Test: 2012)
+
+Training CRF Chunker model...
+Token-level Chunking Accuracy: 96.84%
+
+=== CHUNKING PREDICTION ===
+Word         | POS Tag  | Chunk Tag (IOB)
+----------------------------------------
+The          | DT       | B-NP
+quick        | JJ       | I-NP
+brown        | JJ       | I-NP
+fox          | NN       | I-NP
+jumps        | VBZ      | B-VP
+over         | IN       | B-PP
+the          | DT       | B-NP
+lazy         | JJ       | I-NP
+dog          | NN       | I-NP
+.            | .        | O
