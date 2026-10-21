@@ -1,0 +1,149 @@
+CODE:
+import nltk
+import spacy
+from nltk.stem import PorterStemmer, WordNetLemmatizer
+from nltk.stem.snowball import SnowballStemmer
+
+# Download NLTK data dependencies
+nltk.download('wordnet', quiet=True)
+
+# Load spaCy English pipeline
+nlp = spacy.load("en_core_web_sm")
+
+
+def demonstrate_spacy_morphology(text):
+    print("=== 1. SPACY: MORPHOLOGICAL FEATURES & LEMMATIZATION ===")
+    doc = nlp(text)
+
+    # Header for tabular output
+    print(
+        f"{'Token':<15} | {'Lemma':<15} | {'POS':<8} | {'Morphological Features'}"
+    )
+    print("-" * 80)
+
+    for token in doc:
+        # Skip punctuation for clarity
+        if token.is_punct:
+            continue
+
+        # token.morph contains detailed morphological traits (Number, Tense, Person, Degree, etc.)
+        morph_dict = token.morph.to_dict()
+        morph_str = (
+            ", ".join([f"{k}={v}" for k, v in morph_dict.items()])
+            if morph_dict
+            else "None"
+        )
+
+        print(
+            f"{token.text:<15} | {token.lemma_:<15} | {token.pos_:<8} | {morph_str}"
+        )
+
+    print("\n" + "=" * 80 + "\n")
+
+
+def demonstrate_nltk_stemming(words):
+    print("=== 2. NLTK: INFLECTIONAL MORPHOLOGY (STEMMING) ===")
+    porter = PorterStemmer()
+    snowball = SnowballStemmer("english")
+    lemmatizer = WordNetLemmatizer()
+
+    print(f"{'Word':<15} | {'Porter Stem':<15} | {'Snowball Stem':<15} | {'WordNet Lemma'}")
+    print("-" * 65)
+
+    for word in words:
+        p_stem = porter.stem(word)
+        s_stem = snowball.stem(word)
+        lemma = lemmatizer.lemmatize(
+            word, pos="v"
+        )  # POS set to verb for inflections
+        print(f"{word:<15} | {p_stem:<15} | {s_stem:<15} | {lemma}")
+
+    print("\n" + "=" * 80 + "\n")
+
+
+def custom_affix_stripping(word):
+    """Simple rule-based morpheme segmenter demonstrating prefixes and suffixes."""
+    prefixes = ["un", "re", "dis", "pre", "anti"]
+    suffixes = ["ing", "ed", "ness", "able", "ment", "ly", "s"]
+
+    prefix_found, suffix_found = None, None
+    root = word
+
+    # Extract Prefix
+    for p in prefixes:
+        if root.startswith(p) and len(root) > len(p) + 2:
+            prefix_found = p
+            root = root[len(p) :]
+            break
+
+    # Extract Suffix
+    for s in suffixes:
+        if root.endswith(s) and len(root) > len(s) + 2:
+            suffix_found = s
+            root = root[: -len(s)]
+            break
+
+    return prefix_found, root, suffix_found
+
+
+def demonstrate_morpheme_segmentation(words):
+    print("=== 3. RULE-BASED MORPHEME SEGMENTATION (PREFIX/ROOT/SUFFIX) ===")
+    print(f"{'Word':<15} | {'Prefix':<10} | {'Root (Bound)':<12} | {'Suffix'}")
+    print("-" * 55)
+
+    for word in words:
+        p, r, s = custom_affix_stripping(word.lower())
+        print(
+            f"{word:<15} | {str(p):<10} | {r:<12} | {str(s)}"
+        )
+
+
+if __name__ == "__main__":
+    # Sample text for morphological feature analysis
+    sample_sentence = "The happier researchers were analyzing several complex datasets."
+    demonstrate_spacy_morphology(sample_sentence)
+
+    # Sample words for stemming vs lemmatization
+    test_words = [
+        "studies",
+        "studying",
+        "organizing",
+        "disagreements",
+        "unbreakable",
+    ]
+    demonstrate_nltk_stemming(test_words)
+
+    # Sample complex morphologically derived words
+    complex_words = ["Unbreakable", "Replaced", "Disagreements", "Predetermined"]
+    demonstrate_morpheme_segmentation(complex_words)
+
+    OUTPUT:
+
+    === 1. SPACY: MORPHOLOGICAL FEATURES & LEMMATIZATION ===
+Token           | Lemma           | POS      | Morphological Features
+--------------------------------------------------------------------------
+The             | the             | DET      | Definite=Def, PronType=Art
+happier         | happy           | ADJ      | Degree=Cmp
+researchers     | researcher      | NOUN     | Number=Plur
+were            | be              | AUX      | Mood=Ind, Tense=Past, VerbForm=Fin
+analyzing       | analyze         | VERB     | Aspect=Prog, Tense=Pres, VerbForm=Part
+several         | several         | ADJ      | 
+complex         | complex         | ADJ      | Degree=Pos
+datasets        | dataset         | NOUN     | Number=Plur
+
+=== 2. NLTK: INFLECTIONAL MORPHOLOGY (STEMMING) ===
+Word            | Porter Stem     | Snowball Stem   | WordNet Lemma
+-----------------------------------------------------------------
+studies         | studi           | studi           | study
+studying        | studi           | studi           | study
+organizing      | organ           | organ           | organize
+disagreements   | disagre         | disagre         | disagreements
+unbreakable     | unbreak         | unbreak         | unbreakable
+
+=== 3. RULE-BASED MORPHEME SEGMENTATION (PREFIX/ROOT/SUFFIX) ===
+Word            | Prefix     | Root (Bound) | Suffix
+-------------------------------------------------------
+Unbreakable     | un         | break        | able
+Replaced        | re         | plac         | ed
+Disagreements   | dis        | agreement    | s
+Predetermined   | pre        | determin     | ed
