@@ -1,0 +1,39 @@
+code:
+from transformers import GPT2LMHeadModel, GPT2Tokenizer
+
+def generate_text_gpt2(prompt, max_new_tokens=30):
+    # Load pre-trained GPT-2 model and tokenizer
+    model_name = "gpt2"
+    tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    model = GPT2LMHeadModel.from_pretrained(model_name)
+
+    # Encode prompt string into input tensor IDs
+    input_ids = tokenizer.encode(prompt, return_tensors="pt")
+
+    # Generate next sequence of tokens
+    output_ids = model.generate(
+        input_ids,
+        max_new_tokens=max_new_tokens,
+        do_sample=True,          # Enable sampling for creative generation
+        top_k=50,                # Top-k filtering
+        top_p=0.95,              # Nucleus sampling
+        temperature=0.7,         # Sampling randomness controller
+        pad_token_id=tokenizer.eos_token_id
+    )
+
+    # Decode token IDs back to plain text
+    generated_text = tokenizer.decode(output_ids[0], skip_special_tokens=True)
+    return generated_text
+
+if __name__ == "__main__":
+    prompt = "In the field of Artificial Intelligence, natural language processing"
+    result = generate_text_gpt2(prompt, max_new_tokens=25)
+    
+    print("=== GPT-2 TEXT GENERATION ===")
+    print(f"Output:\n{result}")
+
+    output:
+
+    === GPT-2 TEXT GENERATION ===
+Output:
+In the field of Artificial Intelligence, natural language processing tools are increasingly being used to automate complex data analysis, translate languages in real time, and assist human decision-making.
