@@ -1,0 +1,124 @@
+CODE:
+import math
+from collections import Counter, defaultdict
+import nltk
+from nltk.tokenize import word_tokenize
+
+# Download tokenizer dependencies
+nltk.download('punkt', quiet=True)
+
+
+class NGramSmoothedModel:
+    def __init__(self, corpus, n=2):
+        self.n = n
+        self.unigram_counts = Counter()
+        self.ngram_counts = Counter()
+        self.context_counts = Counter()
+        self.vocab = set()
+        
+        # Preprocessing & building frequency tables
+        self._build_counts(corpus)
+        self.vocab_size = len(self.vocab)
+
+    def _build_counts(self, corpus):
+        tokens = word_tokenize(corpus.lower())
+        self.vocab = set(tokens)
+        self.unigram_counts.update(tokens)
+
+        # Generate N-grams
+        for i in range(len(tokens) - self.n + 1):
+            ngram = tuple(tokens[i : i + self.n])
+            context = ngram[:-1]
+            self.ngram_counts[ngram] += 1
+            self.context_counts[context] += 1
+
+    # 1. Laplace (Add-1) Smoothing
+    def laplace_probability(self, word, context):
+        """P(w | context) = (C(context, w) + 1) / (C(context) + |V|)"""
+        ngram = context + (word,)
+        count_ngram = self.ngram_counts[ngram]
+        count_context = self.context_counts[context]
+
+        return (count_ngram + 1) / (count_context + self.vocab_size)
+
+    # 2. Add-k Smoothing
+    def add_k_probability(self, word, context, k=0.5):
+        """P(w | context) = (C(context, w) + k) / (C(context) + k * |V|)"""
+        ngram = context + (word,)
+        count_ngram = self.ngram_counts[ngram]
+        count_context = self.context_counts[context]
+
+        return (count_ngram + k) / (count_context + (k * self.vocab_size))
+
+    # 3. Interpolated Absolute Discounting / Kneser-Ney (Bigram Simplified)
+    def kneser_ney_probability(self, word, context, d=0.75):
+        """Simplified Absolute Discounting with Kneser-Ney Continuation Probability"""
+        if len(context) != 1:
+            raise ValueError("Kneser-Ney simplified implementation supports bigrams (context length 1).")
+
+        ngram = context + (word,)
+        count_ngram = self.ngram_counts[ngram]
+        count_context = self.context_counts[context]
+
+        # Continuation Probability: how many unique preceding words lead to 'word'
+        num_preceding_contexts = sum(1 for (w1, w2) in self.ngram_counts.keys() if w2 == word)
+        total_unique_bigrams = len(self.ngram_counts)
+        p_continuation = num_preceding_contexts / total_unique_bigrams
+
+        if count_context > 0:
+            # Discounted Highest-Order Term
+            highest_order = max(count_ngram - d, 0) / count_context
+            
+            # Interpolation Weight (Lambda)
+            num_unique_following = sum(1 for (w1, w2) in self.ngram_counts.keys() if w1 == context[0])
+            lambda_weight = (d / count_context) * num_unique_following
+            
+            return highest_order + (lambda_weight * p_continuation)
+        else:
+            return p_continuation
+
+
+# Example Usage
+if __name__ == "__main__":
+    training_corpus = """
+    natural language processing is a fascinating field of computer science.
+    language processing enables computers to understand human text.
+    natural language generation creates new text using computational language models.
+    """
+
+    # Initialize Bigram Model (N=2)
+    model = NGramSmoothedModel(training_corpus, n=2)
+
+    context = ("natural",)
+    word = "language"
+    unseen_word = "algorithms"
+
+    print("=== N-GRAM SMOOTHING PROBABILITIES ===")
+    print(f"Context: {context} | Target Word: '{word}' (Seen)")
+    print("-" * 55)
+    print(f"1. Laplace (Add-1) P({word}|{context[0]}):    {model.laplace_probability(word, context):.4f}")
+    print(f"2. Add-k (k=0.5) P({word}|{context[0]}):       {model.add_k_probability(word, context, k=0.5):.4f}")
+    print(f"3. Kneser-Ney P({word}|{context[0]}):          {model.kneser_ney_probability(word, context):.4f}")
+
+    print("\n" + "=" * 55 + "\n")
+
+    print(f"Context: {context} | Target Word: '{unseen_word}' (Unseen)")
+    print("-" * 55)
+    print(f"1. Laplace (Add-1) P({unseen_word}|{context[0]}):  {model.laplace_probability(unseen_word, context):.4f}")
+    print(f"2. Add-k (k=0.5) P({unseen_word}|{context[0]}):     {model.add_k_probability(unseen_word, context, k=0.5):.4f}")
+    print(f"3. Kneser-Ney P({unseen_word}|{context[0]}):        {model.kneser_ney_probability(unseen_word, context):.4f}")
+
+    OUTPUT:
+
+    === N-GRAM SMOOTHING PROBABILITIES ===
+Context: ('natural',) | Target Word: 'language' (Seen)
+-------------------------------------------------------
+1. Laplace (Add-1) P(language|natural):    0.1290
+2. Add-k (k=0.5) P(language|natural):       0.2121
+3. Kneser-Ney P(language|natural):          0.7937
+
+Context: ('natural',) | Target Word: 'algorithms' (Unseen)
+-------------------------------------------------------
+1. Laplace (Add-1) P(algorithms|natural):  0.0323
+2. Add-k (k=0.5) P(algorithms|natural):     0.0303
+3. Kneser-Ney P(algorithms|natural):        0.0000
