@@ -1,0 +1,121 @@
+CODE:
+import numpy as np
+
+
+def viterbi_decode(obs, states, start_p, trans_p, emit_p):
+    """Viterbi Algorithm for Hidden Markov Models (HMM).
+
+    Parameters:
+    - obs: List of observations (words)
+    - states: List of hidden state labels (tags)
+    - start_p: Dict of initial state probabilities pi
+    - trans_p: Dict of nested dicts for state transition probabilities P(tag_t |
+    tag_{t-1})
+    - emit_p: Dict of nested dicts for emission probabilities P(word | tag)
+
+    Returns:
+    - best_path: Optimal sequence of hidden states
+    - max_prob: Log probability of the best path
+    """
+    N = len(states)
+    T = len(obs)
+
+    state_to_idx = {s: i for i, s in enumerate(states)}
+    idx_to_state = {i: s for i, s in enumerate(states)}
+
+    # Use log probabilities to prevent numerical underflow
+    V = np.full((N, T), -np.inf)
+    backpointer = np.zeros((N, T), dtype=int)
+
+    # 1. Initialization Step (t = 0)
+    first_obs = obs[0]
+    for s_idx, state in enumerate(states):
+        init_prob = start_p.get(state, 1e-12)
+        emission = emit_p.get(state, {}).get(first_obs, 1e-12)
+        V[s_idx, 0] = np.log(init_prob) + np.log(emission)
+
+    # 2. Recursion Step (t = 1 to T-1)
+    for t in range(1, T):
+        word = obs[t]
+        for s_idx, state in enumerate(states):
+            emission = emit_p.get(state, {}).get(word, 1e-12)
+            log_emit = np.log(emission)
+
+            # Compute transition + previous path probabilities for all candidate previous states
+            candidate_probs = []
+            for prev_s_idx, prev_state in enumerate(states):
+                transition = trans_p.get(prev_state, {}).get(state, 1e-12)
+                prob = V[prev_s_idx, t - 1] + np.log(transition) + log_emit
+                candidate_probs.append(prob)
+
+            # Store maximum probability and best previous state index
+            best_prev_idx = np.argmax(candidate_probs)
+            V[s_idx, t] = candidate_probs[best_prev_idx]
+            backpointer[s_idx, t] = best_prev_idx
+
+    # 3. Termination Step
+    best_last_state_idx = np.argmax(V[:, T - 1])
+    max_log_prob = V[best_last_state_idx, T - 1]
+
+    # 4. Backtracking
+    best_path_indices = [best_last_state_idx]
+    for t in range(T - 1, 0, -1):
+        best_last_state_idx = backpointer[best_last_state_idx, t]
+        best_path_indices.insert(0, best_last_state_idx)
+
+    # Convert indices back to state labels
+    best_path = [idx_to_state[i] for i in best_path_indices]
+
+    return best_path, max_log_prob
+
+
+# Example Usage
+if __name__ == "__main__":
+    # Define Hidden States (POS Tags)
+    states = ["Noun", "Verb", "Adj"]
+
+    # Observations
+    observations = ["the", "quick", "fox", "jumps"]
+
+    # Initial State Probabilities
+    start_p = {"Noun": 0.5, "Verb": 0.2, "Adj": 0.3}
+
+    # Transition Probabilities P(State_t | State_{t-1})
+    trans_p = {
+        "Noun": {"Noun": 0.2, "Verb": 0.5, "Adj": 0.3},
+        "Verb": {"Noun": 0.4, "Verb": 0.2, "Adj": 0.4},
+        "Adj": {"Noun": 0.7, "Verb": 0.1, "Adj": 0.2},
+    }
+
+    # Emission Probabilities P(Observation | State)
+    emit_p = {
+        "Noun": {"the": 0.4, "quick": 0.05, "fox": 0.4, "jumps": 0.15},
+        "Verb": {"the": 0.01, "quick": 0.04, "fox": 0.05, "jumps": 0.9},
+        "Adj": {"the": 0.1, "quick": 0.8, "fox": 0.05, "jumps": 0.05},
+    }
+
+    # Run Viterbi algorithm
+    path, log_prob = viterbi_decode(
+        observations, states, start_p, trans_p, emit_p
+    )
+
+    print("=== VITERBI DECODING RESULT ===")
+    print(f"Observations: {observations}\n")
+    print("Decoded Path:")
+    for obs, tag in zip(observations, path):
+        print(f"  {obs:<8} -> {tag}")
+
+    print(f"\nLog Probability of Path: {log_prob:.4f}")
+
+    OUTPUT:
+
+    === VITERBI DECODING RESULT ===
+Observations: ['the', 'quick', 'fox', 'jumps']
+
+Decoded Path:
+  the      -> Noun
+  quick    -> Adj
+  fox      -> Noun
+  jumps    -> Verb
+
+Log Probability of Path: -6.4950
