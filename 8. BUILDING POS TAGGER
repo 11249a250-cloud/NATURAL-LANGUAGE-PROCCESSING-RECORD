@@ -1,0 +1,168 @@
+CODE:
+
+import nltk
+from nltk.corpus import treebank
+import sklearn_crfsuite
+
+# Download treebank corpus and universal tagset
+nltk.download('treebank', quiet=True)
+nltk.download('universal_tagset', quiet=True)
+
+# Approach 1: Rule-Based / N-Gram Backoff Tagger (NLTK)
+
+def build_nltk_backoff_tagger(train_sents):
+    """Builds a cascading backoff tagger:
+
+    Default -> Unigram -> Bigram -> Trigram
+    """
+    # 1. Fallback to most frequent tag ('NOUN')
+    t0 = nltk.DefaultTagger('NOUN')
+
+    # 2. Unigram Tagger: Tags based on single-word frequency
+    t1 = nltk.UnigramTagger(train_sents, backoff=t0)
+
+    # 3. Bigram Tagger: Tags based on current word + previous tag
+    t2 = nltk.BigramTagger(train_sents, backoff=t1)
+
+    # 4. Trigram Tagger: Tags based on current word + previous two tags
+    t3 = nltk.TrigramTagger(train_sents, backoff=t2)
+
+    return t3
+
+# Approach 2: Machine Learning Tagger (Conditional Random Fields - CRF)
+
+def word2features(sent, i):
+    """Extract contextual and morphological features for word at index i."""
+    word = sent[i][0]
+
+    features = {
+        'bias': 1.0,
+        'word.lower()': word.lower(),
+        'word[-3:]': word[-3:],  # Suffix
+        'word[-2:]': word[-2:],  # Suffix
+        'word.isupper()': word.isupper(),
+        'word.istitle()': word.istitle(),
+        'word.isdigit()': word.isdigit(),
+    }
+
+    # Features for previous word
+    if i > 0:
+        prev_word = sent[i - 1][0]
+        features.update({
+            '-1:word.lower()': prev_word.lower(),
+            '-1:word.istitle()': prev_word.istitle(),
+        })
+    else:
+        features['BOS'] = True  # Beginning of sentence
+
+    # Features for next word
+    if i < len(sent) - 1:
+        next_word = sent[i + 1][0]
+        features.update({
+            '+1:word.lower()': next_word.lower(),
+            '+1:word.istitle()': next_word.istitle(),
+        })
+    else:
+        features['EOS'] = True  # End of sentence
+
+    return features
+
+
+def sent2features(sent):
+    return [word2features(sent, i) for i in range(len(sent))]
+
+
+def sent2labels(sent):
+    return [label for token, label in sent]
+
+
+def build_crf_tagger(train_sents):
+    X_train = [sent2features(s) for s in train_sents]
+    y_train = [sent2labels(s) for s in train_sents]
+
+    crf = sklearn_crfsuite.CRF(
+        algorithm='lbfgs',
+        c1=0.1,
+        c2=0.1,
+        max_iterations=100,
+        all_possible_transitions=True,
+    )
+    crf.fit(X_train, y_train)
+    return crf
+
+# Main Execution
+
+if __name__ == '__main__':
+    # Load tagged sentences using universal tagset (NOUN, VERB, ADJ, etc.)
+    tagged_sentences = treebank.tagged_sents(tagset='universal')
+
+    # Train-test split (80% train, 20% test)
+    train_size = int(len(tagged_sentences) * 0.8)
+    train_data = tagged_sentences[:train_size]
+    test_data = tagged_sentences[train_size:]
+
+    print(
+        f"Loaded {len(tagged_sentences)} sentences. (Train: {len(train_data)}, Test: {len(test_data)})\n"
+    )
+
+    
+    # Train & Evaluate N-Gram Backoff Tagger
+    
+    print("=== 1. N-GRAM BACKOFF TAGGER ===")
+    ngram_tagger = build_nltk_backoff_tagger(train_data)
+    ngram_acc = ngram_tagger.accuracy(test_data)
+    print(f"Test Accuracy: {ngram_acc * 100:.2f}%")
+
+    # Sample Inference
+    sample_tokens = [
+        "The",
+        "quick",
+        "brown",
+        "fox",
+        "jumps",
+        "over",
+        "the",
+        "lazy",
+        "dog",,
+    ]
+    ngram_pred = ngram_tagger.tag(sample_tokens)
+    print("Sample Prediction:", ngram_pred)
+    print("\n" + "=" * 60 + "\n")
+
+    # Train & Evaluate CRF Tagger
+
+    print("=== 2. CONDITIONAL RANDOM FIELD (CRF) TAGGER ===")
+    crf_tagger = build_crf_tagger(train_data)
+
+    # Evaluate CRF on test set
+    X_test = [sent2features(s) for s in test_data]
+    y_test = [sent2labels(s) for s in test_data]
+    y_pred = crf_tagger.predict(X_test)
+
+    # Calculate token-level accuracy
+    correct = sum(
+        p == t for pred, true in zip(y_pred, y_test) for p, t in zip(pred, true)
+    )
+    total = sum(len(true) for true in y_test)
+    print(f"Test Accuracy: {(correct / total) * 100:.2f}%")
+
+    # Sample Inference
+    sample_features = [sent2features([(w, '') for w in sample_tokens])]
+    crf_pred = crf_tagger.predict(sample_features)[0]
+    print(
+        "Sample Prediction:",
+        list(zip(sample_tokens, crf_pred)),
+    )
+
+OUTPUT:
+
+Loaded 3914 sentences. (Train: 3131, Test: 783)
+
+=== 1. N-GRAM BACKOFF TAGGER ===
+Test Accuracy: 88.54%
+Sample Prediction: [('The', 'DET'), ('quick', 'NOUN'), ('brown', 'NOUN'), ('fox', 'NOUN'), ('jumps', 'NOUN'), ('over', 'ADP'), ('the', 'DET'), ('lazy', 'NOUN'), ('dog', 'NOUN')]
+
+
+=== 2. CONDITIONAL RANDOM FIELD (CRF) TAGGER ===
+Test Accuracy: 96.12%
+Sample Prediction: [('The', 'DET'), ('quick', 'ADJ'), ('brown', 'ADJ'), ('fox', 'NOUN'), ('jumps', 'VERB'), ('over', 'ADP'), ('the', 'DET'), ('lazy', 'ADJ'), ('dog', 'NOUN')]
