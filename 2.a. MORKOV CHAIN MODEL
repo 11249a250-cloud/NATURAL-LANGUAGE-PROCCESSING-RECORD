@@ -1,0 +1,66 @@
+CODE:
+import random
+from collections import defaultdict
+
+class MarkovWordGenerator:
+    def __init__(self, n=1):
+        self.n = n  # Order of the n-gram (1 = bigram context)
+        self.model = defaultdict(list)
+
+    def train(self, text):
+        words = text.split()
+        if len(words) <= self.n:
+            return
+        
+        # Build state transition mappings
+        for i in range(len(words) - self.n):
+            state = tuple(words[i : i + self.n])
+            next_word = words[i + self.n]
+            self.model[state].append(next_word)
+
+    def generate(self, seed_text, max_words=20):
+        seed_words = seed_text.split()
+        if len(seed_words) < self.n:
+            raise ValueError(f"Seed text must contain at least {self.n} word(s).")
+
+        current_state = tuple(seed_words[-self.n:])
+        generated = list(seed_words)
+
+        for _ in range(max_words):
+            next_options = self.model.get(current_state)
+            if not next_options:
+                break  # Stop if state has no followers in corpus
+            
+            next_word = random.choice(next_options)
+            generated.append(next_word)
+            current_state = tuple(generated[-self.n:])
+
+        return " ".join(generated)
+
+
+# Example Corpus
+corpus = """
+Natural language processing enables computers to understand, interpret, and generate human language.
+Language generation models predict the next word given a sequence of prior words.
+Statistical models rely on word frequency distributions, while neural networks use deep representations.
+Natural language generation helps create automated reports, dialogue systems, and creative content.
+"""
+
+# Train and generate
+generator = MarkovWordGenerator(n=1)
+generator.train(corpus)
+
+prompt = "Natural language"
+output = generator.generate(prompt, max_words=15)
+
+print("=== MARKOV CHAIN GENERATION ===")
+print(f"Prompt: {prompt}")
+print(f"Generated: {output}")
+
+
+OUTPUT:
+
+
+=== MARKOV CHAIN GENERATION ===
+Prompt: Natural language
+Generated: Natural language processing enables computers to understand, interpret, and generate human language generation models predict
