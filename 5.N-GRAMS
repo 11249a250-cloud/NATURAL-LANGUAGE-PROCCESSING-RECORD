@@ -1,0 +1,80 @@
+CODE:
+
+import re
+from collections import Counter
+import nltk
+from nltk.util import ngrams
+from nltk.tokenize import word_tokenize
+
+# Download tokenizer resource
+nltk.download('punkt', quiet=True)
+
+
+# 1. Pure Python Implementation
+def generate_ngrams_python(text, n):
+    # Standardize text: convert to lowercase and strip punctuation
+    text = re.sub(r'[^\w\s]', '', text.lower())
+    tokens = text.split()
+
+    # Create sliding window pairs over the list of tokens
+    ngrams_list = [
+        tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)
+    ]
+    return ngrams_list
+
+
+# 2. NLTK Implementation
+def generate_ngrams_nltk(text, n):
+    text = re.sub(r'[^\w\s]', '', text.lower())
+    tokens = word_tokenize(text)
+
+    # Use NLTK's built-in ngrams function
+    return list(ngrams(tokens, n))
+
+
+# Example Usage
+if __name__ == "__main__":
+    sample_text = "Natural language processing makes computers understand human language."
+
+    print("=== PURE PYTHON N-GRAM GENERATION ===")
+    
+    # Generate Unigrams (N=1), Bigrams (N=2), and Trigrams (N=3)
+    unigrams = generate_ngrams_python(sample_text, n=1)
+    bigrams = generate_ngrams_python(sample_text, n=2)
+    trigrams = generate_ngrams_python(sample_text, n=3)
+
+    print(f"Unigrams (1-grams):\n{unigrams[:4]}\n")
+    print(f"Bigrams  (2-grams):\n{bigrams[:4]}\n")
+    print(f"Trigrams (3-grams):\n{trigrams[:3]}\n")
+
+    print("=" * 60 + "\n")
+
+    print("=== NLTK N-GRAM FREQUENCY COUNT ===")
+    
+    # Generate bigrams using NLTK and calculate frequency distribution
+    nltk_bigrams = generate_ngrams_nltk(sample_text, n=2)
+    bigram_counts = Counter(nltk_bigrams)
+
+    for bigram, count in bigram_counts.items():
+        print(f"{bigram[0]} {bigram[1]:<15} -> Count: {count}")
+
+
+  OUTPUT:
+  === PURE PYTHON N-GRAM GENERATION ===
+Unigrams (1-grams):
+[('natural',), ('language',), ('processing',), ('makes',)]
+
+Bigrams  (2-grams):
+[('natural', 'language'), ('language', 'processing'), ('processing', 'makes'), ('makes', 'computers')]
+
+Trigrams (3-grams):
+[('natural', 'language', 'processing'), ('language', 'processing', 'makes'), ('processing', 'makes', 'computers')]
+
+=== NLTK N-GRAM FREQUENCY COUNT ===
+natural language -> Count: 1
+language processing -> Count: 1
+processing makes -> Count: 1
+makes computers -> Count: 1
+computers understand -> Count: 1
+understand human -> Count: 1
+human language   -> Count: 1
